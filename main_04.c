@@ -31,41 +31,68 @@
 #include "i2c_04.h"
 #include "tmr0_01.h"
 #include "oscilador_01.h"
+#include "LCD_02.h"
 
 //Definición de variables
 #define _XTAL_FREQ 4000000
 
-uint8_t contador = 0;
-uint8_t contador2 = 0;
-uint8_t send = 0;
+
+// POT A LCD
+uint8_t unit_POT = 0;
+uint8_t dec_POT = 0;
+uint8_t valor_POT = 0;
+char s[];
+
+// variables modulo de reloj 
+uint8_t second = 0;  
+uint8_t minute= 0; 
+uint8_t hour = 0;                             
+                          
+                        
 
 //Definicion de funciones
 void setup (void);
 
+unsigned short POT = 0; 
+unsigned short map(uint8_t val, uint8_t in_min, uint8_t in_max, //Función del mapeo
+            unsigned short out_min, unsigned short out_max);
 
-void __interrupt() isr (void){  
-    if(INTCONbits.T0IF){
-            contador++;
-            if (contador == 5){
-                contador = 0; 
-                contador2++; 
-            }
-            PORTD = contador2;
-    }
-    tmr0_reload();
-    return;
-}
+
 
 
 void main(void){
     setup();
+    Lcd_Init(); // start
+    Lcd_Clear(); //limpiar LCD
+    
     while (1){
         I2C_Master_Start();
         I2C_Master_Write(0x50);
-        I2C_Master_Write(contador2);
+        I2C_Master_Write(PORTB);
         I2C_Master_Stop();
         __delay_ms(20);
        
+        I2C_Master_Start();
+        I2C_Master_Write(0x51);             // address slave 
+        valor_POT = I2C_Master_Read(0);     // valor del POT
+        I2C_Master_Stop(); //STOP
+        
+        
+            
+        __delay_ms(20);
+        
+        POT = map(valor_POT, 0, 255, 0, 500);       //map voltaje de 0 a 500
+        unit_POT = POT/100;                         //entero
+        dec_POT = POT-unit_POT*100;                //decimal
+            
+        //Mostramos en LCD
+        Lcd_Set_Cursor(1,1);
+        Lcd_Write_String(" POT ");
+        Lcd_Set_Cursor(2,1);
+        sprintf(s, "%d.%d%dV ", unit_POT, dec_POT/10, dec_POT%10); 
+        Lcd_Set_Cursor(2,1);
+        Lcd_Write_String(s);
+      
     }
     return;
 }
@@ -74,10 +101,15 @@ void setup(void){
     ANSEL = 0;
     ANSELH = 0;
     
-    TRISD = 0x0f;
+    TRISD = 0;
     PORTD = 0;
     
-    INTCONbits.T0IE = 1;        // Habiltamos interrupciones
+    TRISB = 0b00001111; 
+    PORTB = 0; 
+    
+    TRISE = 0;
+    PORTE = 0; 
+    
     INTCONbits.PEIE = 1;
     INTCONbits.GIE = 1;
     
@@ -86,3 +118,6 @@ void setup(void){
     tmr0_init(256);  
 }
 
+unsigned short map(uint8_t x, uint8_t x0, uint8_t x1,
+            unsigned short y0, unsigned short y1){
+    return (unsigned short)(y0+((float)(y1-y0)/(x1-x0))*(x-x0));}
